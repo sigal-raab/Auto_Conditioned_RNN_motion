@@ -1,9 +1,9 @@
-
+import re
 import numpy as np
 import cv2 as cv
 from cv2 import VideoCapture
 import matplotlib.pyplot as plt
-from collections import Counter
+from collections import Counter, OrderedDict
 
 import transforms3d.euler as euler
 import transforms3d.quaternions as quat
@@ -15,13 +15,13 @@ import getopt
 
 import json # For formatted printing
 
-import read_bvh_hierarchy
+from Auto_Conditioned_RNN_motion.src import read_bvh_hierarchy
 
-import rotation2xyz as helper
-from rotation2xyz import *
+from Auto_Conditioned_RNN_motion.src import rotation2xyz as helper
+# from rotation2xyz import *
 
 
-
+""" index of joints in the pos_dic dictionary """
 def get_pos_joints_index(raw_frame_data, non_end_bones, skeleton):
     pos_dic=  helper.get_skeleton_position(raw_frame_data, non_end_bones, skeleton)
     keys=OrderedDict()
@@ -41,13 +41,13 @@ def parse_frames(bvh_filename):
    #data_start = lines.index('MOTION\n')
    first_frame  = data_start + 3
    
-   num_params = len(lines[first_frame].split(' ')) 
+   num_params = len(lines[first_frame].strip().split())
    num_frames = len(lines) - first_frame
                                      
    data= np.zeros((num_frames,num_params))
    
    for i in range(num_frames):
-       line = lines[first_frame + i].split(' ')
+       line = lines[first_frame + i].strip().split()
        line = line[0:len(line)]
 
        
@@ -58,11 +58,11 @@ def parse_frames(bvh_filename):
    return data
 
 
-standard_bvh_file="../train_data_bvh/standard.bvh"
+standard_bvh_file=os.path.join(os.path.expanduser("~/python/Auto_Conditioned_RNN_motion/train_data_bvh/5_openpose.bvh"))
 weight_translation=0.01
-skeleton, non_end_bones=read_bvh_hierarchy.read_bvh_hierarchy(standard_bvh_file)    
+skeleton, non_end_bones, root_name = read_bvh_hierarchy.read_bvh_hierarchy(standard_bvh_file)
 sample_data=parse_frames(standard_bvh_file)
-joint_index= get_pos_joints_index(sample_data[0],non_end_bones, skeleton)
+joint_index= get_pos_joints_index(sample_data[0],non_end_bones, skeleton) # would it be enough to use the indices in skeleton? I think that's what's done internally, in addition to many unused things
 
    
 def get_frame_format_string(bvh_filename):
@@ -78,7 +78,7 @@ def get_frame_format_string(bvh_filename):
 def get_min_foot_and_hip_center(bvh_data):
     print (bvh_data.shape)
     lowest_points = []
-    hip_index = joint_index['hip']
+    hip_index = joint_index[root_name]
     left_foot_index = joint_index['lFoot']
     left_nub_index = joint_index['lFoot_Nub']
     right_foot_index = joint_index['rFoot']
@@ -116,7 +116,7 @@ def get_motion_center(bvh_data):
  
 def augment_train_frame_data(train_frame_data, T, axisR) :
     
-    hip_index=joint_index['hip']
+    hip_index=joint_index[root_name]
     hip_pos=train_frame_data[hip_index*3 : hip_index*3+3]
     
     for i in range(int(len(train_frame_data)/3) ):
@@ -152,11 +152,11 @@ def get_one_frame_training_format_data(raw_frame_data, non_end_bones, skeleton):
     pos_dic=  helper.get_skeleton_position(raw_frame_data, non_end_bones, skeleton)
     new_data= np.zeros(len(pos_dic.keys())*3)
     i=0
-    hip_pos=pos_dic['hip']
+    hip_pos=pos_dic[root_name]
     #print hip_pos
 
     for joint in pos_dic.keys():
-        if(joint=='hip'):
+        if(joint==root_name):
             
             new_data[i*3:i*3+3]=pos_dic[joint].reshape(3)
         else:
@@ -203,13 +203,23 @@ def get_train_data(bvh_filename):
     return new_train_data
           
 
-def write_frames(format_filename, out_filename, data):
+def write_frames(format_filename, out_filename, data, skeleton, override_format_file_offsets):
     
     format_lines = get_frame_format_string(format_filename)
-
     
     num_frames = data.shape[0]
     format_lines[len(format_lines)-2]="Frames:\t"+str(num_frames)+"\n"
+
+    if override_format_file_offsets:
+        bone_idx = 0
+        offsets = np.array([val['offsets'] for val in skeleton.values()])
+        for line_idx, line in enumerate(format_lines):
+            if 'OFFSET' in line:
+                offset_no_brackets = np.array2string(offsets[bone_idx], precision=6, separator=' ')[1:-1]
+                format_lines[line_idx] = re.sub('OFFSET .*\n', 'OFFSET {}\n'.format(offset_no_brackets), line)
+                bone_idx += 1
+        assert bone_idx == len(offsets)
+
     
     bvh_file = open(out_filename, "w")
     bvh_file.writelines(format_lines)
@@ -229,30 +239,41 @@ def regularize_angle(a):
 	
 	return new_ang
 
-def write_xyz_to_bvh(xyz_motion, skeleton, non_end_bones, format_filename, output_filename):
+def write_xyz_to_bvh(xyz_motion, skeleton, non_end_bones, format_filename, output_filename, root_name, override_format_file_offsets):
     bvh_vec_length = len(non_end_bones)*3 + 6
     
-    out_data = np.zeros([len(xyz_motion), bvh_vec_length])
+    out_data = np.zeros([len(xyz_motion), bvh_vec_length])  # out_data dim = #frames x #(values in bvh row)
     for i in range(1, len(xyz_motion)):
         positions = xyz_motion[i]
-        rotation_matrices, rotation_angles = helper.xyz_to_rotations_debug(skeleton, positions)
-        new_motion1 = helper.rotation_dic_to_vec(rotation_angles, non_end_bones, positions)
+        rotation_matrices, rotation_angles = helper.xyz_to_rotations_debug(skeleton, positions, root_name)
+        new_motion1 = helper.rotation_dic_to_vec(rotation_angles, non_end_bones, positions, root_name)
 								
         new_motion = np.array([round(a,6) for a in new_motion1])
         new_motion[0:3] = new_motion1[0:3]
 								
         out_data[i,:] = np.transpose(new_motion[:,np.newaxis])
-        
     
-    write_frames(format_filename, output_filename, out_data)
+    write_frames(format_filename, output_filename, out_data, skeleton, override_format_file_offsets)
 
-def write_traindata_to_bvh(bvh_filename, train_data):
+def write_traindata_to_bvh(bvh_filename, train_data, override_format_file_offsets=False):
+
+    # override skeleton of "standard" bvh by the skeleton of the data
+    if override_format_file_offsets:
+        for i, joint_values in enumerate(skeleton.values()):
+            # convert from global coords to offsets from parent
+            parent_xyz = np.array([0,0,0])
+            if joint_values['parent'] is not None:
+                parent_idx = joint_index[joint_values['parent']]
+                parent_xyz = train_data[0,parent_idx*3:parent_idx*3+3]
+            offsets = train_data[0,i*3:i*3+3] - parent_xyz
+            joint_values['offsets'] = offsets
+
     seq_length=train_data.shape[0]
     xyz_motion = []
     format_filename = standard_bvh_file
     for i in range(seq_length):
-        data = train_data[i]
-        data = np.array([round(a,6) for a in train_data[i]])
+        data = train_data[i].round(6)
+        # data = np.array([round(a,6) for a in train_data[i]])
         #print data
         #input(' ' )
         position = data_vec_to_position_dic(data, skeleton)        
@@ -261,19 +282,20 @@ def write_traindata_to_bvh(bvh_filename, train_data):
         xyz_motion.append(position)
 
         
-    write_xyz_to_bvh(xyz_motion, skeleton, non_end_bones, format_filename, bvh_filename)
+    write_xyz_to_bvh(xyz_motion, skeleton, non_end_bones, format_filename, bvh_filename, root_name, override_format_file_offsets)
     
 def data_vec_to_position_dic(data, skeleton):
     data = data*100
-    hip_pos=data[joint_index['hip']*3:joint_index['hip']*3+3]
+    hip_pos=data[joint_index[root_name]*3:joint_index[root_name]*3+3]
     positions={}
     for joint in joint_index:
         positions[joint]=data[joint_index[joint]*3:joint_index[joint]*3+3]
-    for joint in positions.keys():
-        if(joint == 'hip'):
-            positions[joint]=positions[joint]
-        else:
-            positions[joint]=positions[joint] +hip_pos
+    if False: # the following is in the original code, where data is probably relative to hip location
+        for joint in positions.keys():
+            if(joint == root_name):
+                positions[joint]=positions[joint]
+            else:
+                positions[joint]=positions[joint] +hip_pos
             
     return positions
        
@@ -315,7 +337,7 @@ def get_norm(v):
 def get_regularized_positions(positions):
     
     org_positions=positions
-    new_positions=regularize_bones(org_positions, positions, skeleton, 'hip')
+    new_positions=regularize_bones(org_positions, positions, skeleton, root_name)
     return new_positions
 
 def regularize_bones(original_positions, new_positions, skeleton, joint):
@@ -341,11 +363,11 @@ def get_regularized_train_data(one_frame_train_data):
     for joint in joint_index:
         positions[joint]=one_frame_train_data[joint_index[joint]*3:joint_index[joint]*3+3]
     
-    #print joint_index['hip']
-    hip_pos=one_frame_train_data[joint_index['hip']*3:joint_index['hip']*3+3]
+    #print joint_index[root_name]
+    hip_pos=one_frame_train_data[joint_index[root_name]*3:joint_index[root_name]*3+3]
 
     for joint in positions.keys():
-        if(joint == 'hip'):
+        if(joint == root_name):
             positions[joint]=positions[joint]
         else:
             positions[joint]=positions[joint] +hip_pos
@@ -357,8 +379,8 @@ def get_regularized_train_data(one_frame_train_data):
     new_data=np.zeros(one_frame_train_data.shape)
     i=0
     for joint in new_pos.keys():
-        if (joint!='hip'):
-            new_data[i*3:i*3+3]=new_pos[joint]-new_pos['hip']
+        if (joint!=root_name):
+            new_data[i*3:i*3+3]=new_pos[joint]-new_pos[root_name]
         else:
             new_data[i*3:i*3+3]=new_pos[joint]
         i=i+1
@@ -371,15 +393,15 @@ def check_length(one_frame_train_data):
     for joint in joint_index:
         positions[joint]=one_frame_train_data[joint_index[joint]*3:joint_index[joint]*3+3]
     
-    #print joint_index['hip']
-    hip_pos=one_frame_train_data[joint_index['hip']*3:joint_index['hip']*3+3]
+    #print joint_index[root_name]
+    hip_pos=one_frame_train_data[joint_index[root_name]*3:joint_index[root_name]*3+3]
 
     for joint in positions.keys():
-        if(joint == 'hip'):
+        if(joint == root_name):
             positions[joint]=positions[joint]
         else:
             positions[joint]=positions[joint] +hip_pos
-    
+
     for joint in positions.keys():
         if(skeleton[joint]['parent']!=None):
             p1=positions[joint]

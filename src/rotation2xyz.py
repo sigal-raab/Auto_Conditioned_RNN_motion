@@ -3,7 +3,8 @@ import numpy as np, math, re
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import transforms3d.euler as euler, read_bvh_hierarchy, cv2 as cv
+import transforms3d.euler as euler, cv2 as cv
+from Auto_Conditioned_RNN_motion.src import read_bvh_hierarchy
 
 def get_child_dict(skel):
     child_dict = {}
@@ -12,8 +13,7 @@ def get_child_dict(skel):
         if parent in child_dict.keys():
             child_dict[parent].append(t)
         else:
-            child_dict[parent] = [
-             t]
+            child_dict[parent] = [t]
 
     return child_dict
 
@@ -47,7 +47,7 @@ def get_skeleton_position(motion, non_end_bones, skel):
 def get_bone_start_end(positions, skeleton):
     bone_list = []
     for bone in positions.keys():
-        if bone != 'hip':
+        if bone != root_name:
             bone_end = positions[bone]
             bone_start = positions[skeleton[bone]['parent']]
             bone_tuple = (bone_start, bone_end)
@@ -56,16 +56,16 @@ def get_bone_start_end(positions, skeleton):
     return bone_list
 
 
-def rotation_dic_to_vec(rotation_dictionary, non_end_bones, position):
+def rotation_dic_to_vec(rotation_dictionary, non_end_bones, position, root_name):
     motion_vec = np.zeros(6 + len(non_end_bones) * 3)
-    motion_vec[0:3] = position['hip']
-    motion_vec[3] = rotation_dictionary['hip'][2]
-    motion_vec[4] = rotation_dictionary['hip'][1]
-    motion_vec[5] = rotation_dictionary['hip'][0]
+    motion_vec[0:3] = position[root_name]
+    motion_vec[3] = rotation_dictionary[root_name][2]
+    motion_vec[4] = rotation_dictionary[root_name][1]
+    motion_vec[5] = rotation_dictionary[root_name][0]
     for i in range(0, len(non_end_bones)):
         motion_vec[3 * (i + 2)] = rotation_dictionary[non_end_bones[i]][2]
-        motion_vec[3 * (i + 2) + 1] = rotation_dictionary[non_end_bones[i]][0]
-        motion_vec[3 * (i + 2) + 2] = rotation_dictionary[non_end_bones[i]][1]
+        motion_vec[3 * (i + 2) + 1] = rotation_dictionary[non_end_bones[i]][1]
+        motion_vec[3 * (i + 2) + 2] = rotation_dictionary[non_end_bones[i]][0]
 
     return motion_vec
 
@@ -227,7 +227,7 @@ def rotationMatrixToEulerAngles(R):
 def xyz_to_rotations(skel, position):
     all_rotations = {}
     for bone in skel.keys():
-        if bone != 'hip':
+        if bone != root_name:
             parent = skel[bone]['parent']
             parent_xyz = position[parent]
             bone_xyz = position[bone]
@@ -249,7 +249,7 @@ def rel_rotation(a, b):
     return Rotation
 
 
-def xyz_to_rotations_debug(skel, position):
+def xyz_to_rotations_debug(skel, position, root_name):
     all_rotations = {}
     all_rotation_matrices = {}
     children_dict = get_child_dict(skel)
@@ -273,19 +273,19 @@ def xyz_to_rotations_debug(skel, position):
             children_xyz = np.zeros([len(children), 3])
             children_orig = np.zeros([len(children), 3])
             for i in range(len(children)):
-                children_xyz[i, :] = np.array(position[children[i]]) - np.array(position[bone])
+                children_xyz[i, :] = np.array(position[children[i]]) - np.array(position[bone]) # translation from cur joint to child i
                 children_orig[i, :] = np.array(skel[children[i]]['offsets'])
+                # normalize the translation according to the bvh file bone length (linalg.norm returns bone length)
                 children_xyz[i, :] = children_xyz[i, :] * np.linalg.norm(children_orig[i, :]) / np.linalg.norm(children_xyz[i, :])
-                assert np.allclose(np.linalg.norm(children_xyz[i, :]), np.linalg.norm(children_orig[i, :]))
+                assert np.allclose(np.linalg.norm(children_xyz[i, :]), np.linalg.norm(children_orig[i, :])) # new bone length ~= bvh bone length
 
             parent_space_children_xyz = np.dot(children_xyz, parent_rot)
             rotation = kabsch(parent_space_children_xyz, children_orig)
-            if bone == 'hip':
+            if bone == root_name:
                 all_rotations[bone] = np.array(euler.mat2euler(rotation, 'sxyz')) * (180.0 / math.pi)
             else:
                 angles = np.array(euler.mat2euler(rotation, 'syxz')) * (180.0 / math.pi)
-                all_rotations[bone] = [
-                 angles[1], angles[0], angles[2]]
+                all_rotations[bone] = np.array([angles[1], angles[0], angles[2]])
             all_rotation_matrices[bone] = rotation
 
     return (all_rotation_matrices, all_rotations)

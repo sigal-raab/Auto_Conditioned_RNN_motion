@@ -1,0 +1,78 @@
+HIERARCHY
+ROOT Hips
+{
+	OFFSET 0.0 0.0 0.0
+	CHANNELS 6 Xposition Yposition Zposition Zrotation Yrotation Xrotation 
+	JOINT RightUpLeg
+	{
+		OFFSET -3.0 0.0 0.0
+		CHANNELS 3 Zrotation Yrotation Xrotation
+		JOINT RightLeg
+		{
+			OFFSET 0.0 0.0 -12.0
+			CHANNELS 3 Zrotation Yrotation Xrotation
+			End Site
+			{
+				OFFSET 0.0 0.0 -10.0
+			}
+		}
+	}
+	JOINT LeftUpLeg
+	{
+		OFFSET 3.0 0.0 0.0
+		CHANNELS 3 Zrotation Yrotation Xrotation
+		JOINT LeftLeg
+		{
+			OFFSET 0.0 0.0 -12.0
+			CHANNELS 3 Zrotation Yrotation Xrotation
+			End Site
+			{
+				OFFSET 0.0 0.0 -10.0
+			}
+		}
+	}
+	JOINT NeckBase
+	{
+		OFFSET 0.0 0.0 10.0
+		CHANNELS 3 Zrotation Yrotation Xrotation
+		End Site
+		{
+			OFFSET 0.0 0.0 3.0
+		}
+		JOINT LeftArm
+		{
+			OFFSET 3.0 0.0 0.0
+			CHANNELS 3 Zrotation Yrotation Xrotation
+			JOINT LeftForeArm
+			{
+				OFFSET 6.0 0.0 0.0
+				CHANNELS 3 Zrotation Yrotation Xrotation
+				End Site
+				{
+					OFFSET 5.0 0.0 0.0
+				}
+			}
+		}
+		JOINT RightArm
+		{
+			OFFSET -3.0 0.0 0.0
+			CHANNELS 3 Zrotation Yrotation Xrotation
+			JOINT RightForeArm
+			{
+				OFFSET -6.0 0.0 0.0
+				CHANNELS 3 Zrotation Yrotation Xrotation
+				End Site
+				{
+					OFFSET -5.0 0.0 0.0
+				}
+			}
+		}
+	}
+}
+MOTION
+Frames: 2
+Frame Time: 0.041667
+0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+0.0 0.0 0.0 0.0 0.0 0.0       0.0 0.0 0.0       0.0 0.0 0.0       0.0 0.0 -90.0       0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+0.064668 -0.064221 -0.198159 0.357643 5.0 -5.0 -5.0 -28.659539 17.320847 nan nan nan -17.534900 30.096354 -17.405309 nan nan nan nan nan nan -31.138358 -8.885722 15.345255 nan nan nan 20.210554 3.009057 -178.487869 nan nan nan
+0.064668 -0.064221 -0.198159 0.357643 5.0 -5.0 -5.0 -28.659539 17.320847 nan nan nan -17.534900 30.096354 -17.405309 nan nan nan nan nan nan -31.138358 -8.885722 15.345255 nan nan nan 20.210554 3.009057 -178.487869 nan nan nan

@@ -134,7 +134,7 @@ def parse_hierarchy(bvh):
     # print "Root ", root_bone
     while(bvh[current_token][1] == "JOINT"):
         ( current_token, skeleton, bone_context, non_end_bones, motion_channels) = parse_joint(bvh,  current_token, skeleton, bone_context, non_end_bones, motion_channels)
-    return  skeleton, non_end_bones
+    return  skeleton, non_end_bones, root_name
 
 
 
@@ -144,5 +144,5 @@ def read_bvh_hierarchy(bvh_filename):
 	bvh_file.close()
 	tokens, remainder = scanner.scan(bvh)
 	skeleton = OrderedDict()
-	skeleton, non_end_bones=parse_hierarchy(tokens)
-	return skeleton, non_end_bones
+	skeleton, non_end_bones, root_name = parse_hierarchy(tokens)
+	return skeleton, non_end_bones, root_name
