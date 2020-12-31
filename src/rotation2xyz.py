@@ -281,7 +281,11 @@ def xyz_to_rotations_debug(skel, position, root_name):
 
             parent_space_children_xyz = np.dot(children_xyz, parent_rot)
             rotation = kabsch(parent_space_children_xyz, children_orig)
-            if bone == root_name:
+            # The following conditional phrase works only sometimes. I guess it is related to the order of rotations,
+            # i.e., z first, y next and x last (='sxyz'), or z first, x next and y last (=syxz).
+            # when representing in blender, it is using 'sxyz'.
+            # so I changed it to use 'sxyz' always.
+            if True: # bone == root_name:
                 all_rotations[bone] = np.array(euler.mat2euler(rotation, 'sxyz')) * (180.0 / math.pi)
             else:
                 angles = np.array(euler.mat2euler(rotation, 'syxz')) * (180.0 / math.pi)
