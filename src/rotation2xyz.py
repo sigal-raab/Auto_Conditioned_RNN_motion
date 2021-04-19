@@ -296,13 +296,26 @@ def xyz_to_rotations_debug(skel, position, root_name):
 
 
 def kabsch(p, q):
-    A = np.dot(np.transpose(p), q)
-    V, s, W = np.linalg.svd(A)
-    A_2 = np.dot(np.dot(V, np.diag(s)), W)
-    assert np.allclose(A, A_2)
-    d = np.sign(np.linalg.det(np.dot(np.transpose(W), np.transpose(V))))
-    s_2 = np.ones(len(s))
-    s_2[len(s) - 1] = d
-    rotation = np.dot(np.transpose(W), np.dot(np.diag(s_2), np.transpose(V)))
+    assert p.shape[0]==q.shape[0]
+    if p.shape[0] == 1:
+        # the advanced algorithm outputs results with self rotations when having only 2 vectors, hence
+        # I [SR] added this section witht he naive algorithm, which is consistent and good enough for 2 vectors
+        from scipy.spatial.transform import Rotation as R
+        p0 = p[0]
+        q0 = q[0]
+        angles = np.arccos(np.inner(p0/np.linalg.norm(p0), q0/np.linalg.norm(q0)).clip(-1, 1))
+        axes = np.cross(p0, q0)
+        rotvec = axes / (np.linalg.norm(axes)+1e-10) * angles
+        rotation = R.from_rotvec(rotvec).as_matrix()
+        assert np.allclose(rotation @ p0, q0)
+    else:
+        A = np.dot(np.transpose(p), q)
+        V, s, W = np.linalg.svd(A)
+        A_2 = np.dot(np.dot(V, np.diag(s)), W)
+        assert np.allclose(A, A_2)
+        d = np.sign(np.linalg.det(np.dot(np.transpose(W), np.transpose(V))))
+        s_2 = np.ones(len(s))
+        s_2[len(s) - 1] = d
+        rotation = np.dot(np.transpose(W), np.dot(np.diag(s_2), np.transpose(V)))
     assert isRotationMatrix(rotation)
     return np.transpose(rotation)
